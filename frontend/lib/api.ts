@@ -100,6 +100,11 @@ export interface DocumentItem {
   createdAt: string;
 }
 
+export interface DocumentPage {
+  pageNumber: number | null;
+  text: string;
+}
+
 export interface Chat {
   id: string;
   title: string;
@@ -241,6 +246,10 @@ export const documentsApi = {
   },
   remove: (orgId: string, id: string) =>
     apiFetch<{ ok: true }>(`/organizations/${orgId}/documents/${id}`, { method: "DELETE" }),
+  content: (orgId: string, id: string) =>
+    apiFetch<{ document: DocumentItem; pages: DocumentPage[]; truncated: boolean }>(
+      `/organizations/${orgId}/documents/${id}/content`
+    ),
 };
 
 export const chatApi = {
@@ -259,7 +268,12 @@ export const chatApi = {
     apiFetch<{ messages: Message[]; chat: ChatMeta }>(
       `/organizations/${orgId}/chats/${chatId}/messages`
     ),
-  send: (orgId: string, chatId: string, content: string, opts?: { collectionId?: string; mode?: AnswerMode }) =>
+  send: (
+    orgId: string,
+    chatId: string,
+    content: string,
+    opts?: { collectionId?: string; mode?: AnswerMode; documentId?: string }
+  ) =>
     apiFetch<{ userMessage: Message; assistantMessage: Message }>(
       `/organizations/${orgId}/chats/${chatId}/messages`,
       { method: "POST", body: JSON.stringify({ content, ...opts }) }

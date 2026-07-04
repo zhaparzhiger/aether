@@ -8,8 +8,12 @@ import { requireAuth } from "../middleware/auth";
 import { requireOrgRole } from "../middleware/requireRole";
 import { upload } from "../services/storage";
 import { processDocument } from "../services/documentProcessor";
+import { extractPages } from "../services/chunking";
 
 const router = Router();
+
+// cap preview payload so huge documents don't blow up the response
+const PREVIEW_CHAR_LIMIT = 150_000;
 
 router.get("/:orgId/documents", requireAuth, requireOrgRole("member"), async (req, res, next) => {
   try {
@@ -23,6 +27,51 @@ router.get("/:orgId/documents", requireAuth, requireOrgRole("member"), async (re
     next(err);
   }
 });
+
+router.get(
+  "/:orgId/documents/:id/content",
+  requireAuth,
+  requireOrgRole("member"),
+  async (req, res, next) => {
+    try {
+      const [doc] = await db
+        .select()
+        .from(documents)
+        .where(and(eq(documents.id, req.params.id), eq(documents.organizationId, req.params.orgId)))
+        .limit(1);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+
+      let pages;
+      try {
+        pages = await extractPages(doc.storagePath, doc.mimeType);
+      } catch {
+        return res.status(422).json({ error: "Не удалось прочитать содержимое документа" });
+      }
+
+      let remaining = PREVIEW_CHAR_LIMIT;
+      let truncated = false;
+      const limited = [];
+      for (const page of pages) {
+        if (remaining <= 0) {
+          truncated = true;
+          break;
+        }
+        if (page.text.length > remaining) {
+          limited.push({ pageNumber: page.pageNumber, text: page.text.slice(0, remaining) });
+          remaining = 0;
+          truncated = true;
+        } else {
+          limited.push(page);
+          remaining -= page.text.length;
+        }
+      }
+
+      res.json({ document: doc, pages: limited, truncated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 router.post(
   "/:orgId/documents",

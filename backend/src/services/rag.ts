@@ -14,14 +14,16 @@ export async function retrieveRelevantChunks(params: {
   organizationId: string;
   queryEmbedding: number[];
   collectionId?: string;
+  documentId?: string;
   topK?: number;
 }): Promise<RetrievedChunk[]> {
-  const { organizationId, queryEmbedding, collectionId, topK = 6 } = params;
+  const { organizationId, queryEmbedding, collectionId, documentId, topK = 6 } = params;
   const vectorLiteral = `[${queryEmbedding.join(",")}]`;
 
   const collectionFilter = collectionId
     ? sql`AND d.collection_id = ${collectionId}`
     : sql``;
+  const documentFilter = documentId ? sql`AND dc.document_id = ${documentId}` : sql``;
 
   const rows = await db.execute<{
     chunk_id: string;
@@ -43,6 +45,7 @@ export async function retrieveRelevantChunks(params: {
     WHERE dc.organization_id = ${organizationId}
       AND d.status = 'ready'
       ${collectionFilter}
+      ${documentFilter}
     ORDER BY dc.embedding <=> ${vectorLiteral}::vector ASC
     LIMIT ${topK}
   `);

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../config/db";
-import { chats, messages, users, companyMemory } from "../db/schema";
+import { chats, messages, users, companyMemory, documents } from "../db/schema";
 import { requireAuth } from "../middleware/auth";
 import { requireOrgRole, getOrgRole } from "../middleware/requireRole";
 import { embedQuery } from "../services/embeddings";
@@ -244,6 +244,7 @@ router.get(
 const sendMessageSchema = z.object({
   content: z.string().min(1),
   collectionId: z.string().uuid().optional(),
+  documentId: z.string().uuid().optional(),
   mode: z.enum(["short", "detailed"]).optional(),
 });
 
@@ -269,6 +270,20 @@ router.post(
       }
       const chat = access.chat;
 
+      // attached document (вопрос по конкретному документу)
+      let attachedDoc: { id: string; originalName: string } | null = null;
+      if (body.documentId) {
+        const [doc] = await db
+          .select()
+          .from(documents)
+          .where(
+            and(eq(documents.id, body.documentId), eq(documents.organizationId, req.params.orgId))
+          )
+          .limit(1);
+        if (!doc) return res.status(404).json({ error: "Прикреплённый документ не найден" });
+        attachedDoc = { id: doc.id, originalName: doc.originalName };
+      }
+
       const previousMessages = await db
         .select()
         .from(messages)
@@ -281,7 +296,15 @@ router.post(
 
       const [userMessage] = await db
         .insert(messages)
-        .values({ chatId: chat.id, role: "user", content: body.content })
+        .values({
+          chatId: chat.id,
+          role: "user",
+          content: body.content,
+          // show the attachment as a chip on the user message
+          sources: attachedDoc
+            ? [{ documentId: attachedDoc.id, filename: attachedDoc.originalName, pageNumber: null }]
+            : undefined,
+        })
         .returning();
 
       let answer: string;
@@ -313,14 +336,21 @@ router.post(
           organizationId: req.params.orgId,
           queryEmbedding,
           collectionId: body.collectionId,
+          documentId: attachedDoc?.id,
+          topK: attachedDoc ? 10 : undefined,
         });
 
-        const context = retrieved
-          .map(
-            (r, i) =>
-              `[${i + 1}] Источник: ${r.filename}${r.pageNumber ? `, стр. ${r.pageNumber}` : ""}\n${r.content}`
-          )
-          .join("\n\n");
+        const attachmentNote = attachedDoc
+          ? `Пользователь прикрепил документ «${attachedDoc.originalName}» — отвечай на вопрос по этому документу.\n\n`
+          : "";
+        const context =
+          attachmentNote +
+          retrieved
+            .map(
+              (r, i) =>
+                `[${i + 1}] Источник: ${r.filename}${r.pageNumber ? `, стр. ${r.pageNumber}` : ""}\n${r.content}`
+            )
+            .join("\n\n");
 
         answer = await askGemini({
           question: body.content,

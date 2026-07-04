@@ -23,18 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { collectionsApi, documentsApi, Collection, DocumentItem, DocumentStatus, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { hasRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { docType } from "@/lib/doc-type";
+import {
+  DocumentPreviewDialog,
+  PreviewTarget,
+} from "@/components/dashboard/document-preview-dialog";
 
 const STATUS_LABELS: Record<DocumentStatus, string> = {
   pending: "В очереди",
@@ -55,6 +52,10 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+}
+
 // selected collection: "all" | "none" (без коллекции) | collection id
 type CollectionFilter = "all" | "none" | string;
 
@@ -68,6 +69,8 @@ export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCollection, setActiveCollection] = useState<CollectionFilter>("all");
+
+  const [previewDoc, setPreviewDoc] = useState<PreviewTarget | null>(null);
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadCollection, setUploadCollection] = useState<string>("none");
@@ -375,39 +378,81 @@ export default function DocumentsPage() {
           {activeCollection === "all" ? "Документов пока нет." : "В этой коллекции пока нет документов."}
         </p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Файл</TableHead>
-              <TableHead>Коллекция</TableHead>
-              <TableHead>Размер</TableHead>
-              <TableHead>Статус</TableHead>
-              {canManage && <TableHead className="text-right">Действия</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visibleDocuments.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="font-medium">{d.originalName}</TableCell>
-                <TableCell>{collectionName(d.collectionId)}</TableCell>
-                <TableCell>{formatSize(d.sizeBytes)}</TableCell>
-                <TableCell>
-                  <Badge variant={STATUS_VARIANT[d.status]} title={d.failureReason ?? undefined}>
-                    {STATUS_LABELS[d.status]}
-                  </Badge>
-                </TableCell>
-                {canManage && (
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(d.id)}>
-                      Удалить
-                    </Button>
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {visibleDocuments.map((d) => {
+            const type = docType({ mimeType: d.mimeType, name: d.originalName });
+            const TypeIcon = type.icon;
+            return (
+              <Card
+                key={d.id}
+                onClick={() => {
+                  if (d.status !== "ready") {
+                    toast.info(
+                      d.status === "failed"
+                        ? "Документ не был обработан — превью недоступно"
+                        : "Документ ещё обрабатывается — превью появится чуть позже"
+                    );
+                    return;
+                  }
+                  setPreviewDoc({ id: d.id, name: d.originalName, mimeType: d.mimeType });
+                }}
+                className="group cursor-pointer py-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+              >
+                <CardContent className="flex h-full flex-col gap-3 px-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div
+                      className={cn(
+                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                        type.bg
+                      )}
+                    >
+                      <TypeIcon className={cn("h-5 w-5", type.text)} />
+                    </div>
+                    {canManage && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                        title="Удалить документ"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(d.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p
+                      className="line-clamp-2 text-sm font-medium break-all"
+                      title={d.originalName}
+                    >
+                      {d.originalName}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {type.label} · {formatSize(d.sizeBytes)} · {formatDate(d.createdAt)}
+                    </p>
+                  </div>
+                  <div className="mt-auto flex items-center justify-between gap-2">
+                    <Badge variant={STATUS_VARIANT[d.status]} title={d.failureReason ?? undefined}>
+                      {STATUS_LABELS[d.status]}
+                    </Badge>
+                    {d.collectionId && (
+                      <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                        <Folder className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{collectionName(d.collectionId)}</span>
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
+
+      <DocumentPreviewDialog orgId={orgId} target={previewDoc} onClose={() => setPreviewDoc(null)} />
     </div>
   );
 }
