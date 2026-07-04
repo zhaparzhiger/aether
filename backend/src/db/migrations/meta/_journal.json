@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1783102242958,
+      "tag": "0000_broad_tyger_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783106571320,
+      "tag": "0001_shared_chats_memory",
+      "breakpoints": true
+    }
+  ]
+}

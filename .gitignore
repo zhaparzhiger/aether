@@ -1,0 +1,20 @@
+# secrets — never commit
+google-key.json
+.env
+.env.local
+.env.*.local
+
+# dependencies
+node_modules/
+
+# uploaded user files
+backend/uploads/
+
+# builds
+.next/
+dist/
+build/
+
+# misc
+*.log
+.DS_Store
