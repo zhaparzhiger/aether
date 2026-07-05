@@ -14,7 +14,9 @@ services:
     rootDir: backend
     plan: free
     healthCheckPath: /health
-    buildCommand: npm install --include=dev && npm run build && npm run db:migrate
+    # tsx runs the TS directly (handles the ESM-only @google/genai cleanly),
+    # so no tsc build step — just install deps and run migrations against Neon.
+    buildCommand: npm install --include=dev && npm run db:migrate
     startCommand: npm start
     envVars:
       - key: NODE_ENV
