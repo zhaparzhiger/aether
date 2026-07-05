@@ -9,10 +9,11 @@ export interface DocTypeInfo {
   bg: string;
 }
 
+// monochrome design system: file types differ by shade and label, not by color
 const TYPES: Record<string, DocTypeInfo> = {
-  pdf: { label: "PDF", icon: FileText, text: "text-red-500", bg: "bg-red-500/10" },
-  docx: { label: "DOCX", icon: FileText, text: "text-blue-500", bg: "bg-blue-500/10" },
-  txt: { label: "TXT", icon: File, text: "text-emerald-600", bg: "bg-emerald-500/10" },
+  pdf: { label: "PDF", icon: FileText, text: "text-foreground", bg: "bg-foreground/[0.08]" },
+  docx: { label: "DOCX", icon: FileText, text: "text-foreground/70", bg: "bg-foreground/[0.06]" },
+  txt: { label: "TXT", icon: File, text: "text-muted-foreground", bg: "bg-muted" },
 };
 
 const FALLBACK: DocTypeInfo = {

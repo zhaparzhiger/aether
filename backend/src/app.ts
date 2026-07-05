@@ -12,9 +12,15 @@ import memoryRoutes from "./routes/memory";
 import analyticsRoutes from "./routes/analytics";
 import searchRoutes from "./routes/search";
 import generateRoutes from "./routes/generate";
+import legalRoutes from "./routes/legal";
+import activityRoutes from "./routes/activity";
 import { errorHandler } from "./middleware/errorHandler";
 
 export const app = express();
+
+// Render/managed hosts terminate TLS at a proxy; trust it so Express treats the
+// request as secure and issues Secure cookies.
+if (env.isProd) app.set("trust proxy", 1);
 
 app.use(cors({ origin: env.frontendUrl, credentials: true }));
 app.use(cookieParser());
@@ -32,6 +38,8 @@ app.use("/organizations", memoryRoutes);
 app.use("/organizations", analyticsRoutes);
 app.use("/organizations", searchRoutes);
 app.use("/organizations", generateRoutes);
+app.use("/organizations", legalRoutes);
+app.use("/organizations", activityRoutes);
 app.use("/invites", invitesRouter);
 
 app.use(errorHandler);

@@ -58,7 +58,7 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl p-6">
+    <div className="mx-auto w-full max-w-4xl p-4 sm:p-6">
       <h1 className="mb-6 text-2xl font-semibold">Поиск по документам</h1>
 
       <form onSubmit={handleSearch} className="mb-6 space-y-3">

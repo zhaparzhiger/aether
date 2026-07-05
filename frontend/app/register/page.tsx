@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { authApi, invitesApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleButton } from "@/components/auth/google-button";
+import { LegalFooter } from "@/components/legal/legal-footer";
 import { getPendingInvite, clearPendingInvite } from "@/lib/pending-invite";
 
 export default function RegisterPage() {
@@ -64,7 +65,8 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
+      <div className="w-full max-w-sm">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-2xl">Регистрация в Aether</CardTitle>
           <CardDescription>Создайте аккаунт, чтобы начать работу</CardDescription>
@@ -114,6 +116,8 @@ export default function RegisterPage() {
           </p>
         </CardContent>
       </Card>
+      <LegalFooter />
+      </div>
     </div>
   );
 }

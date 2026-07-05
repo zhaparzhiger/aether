@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { authApi, invitesApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { GoogleButton } from "@/components/auth/google-button";
+import { LegalFooter } from "@/components/legal/legal-footer";
 import { getPendingInvite, clearPendingInvite } from "@/lib/pending-invite";
 
 export default function LoginPage() {
@@ -63,7 +64,8 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
+      <div className="w-full max-w-sm">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-2xl">Вход в Aether</CardTitle>
           <CardDescription>Корпоративный ИИ-ассистент вашей компании</CardDescription>
@@ -108,6 +110,8 @@ export default function LoginPage() {
           </p>
         </CardContent>
       </Card>
+      <LegalFooter />
+      </div>
     </div>
   );
 }

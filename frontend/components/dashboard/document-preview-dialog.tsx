@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,8 @@ export interface PreviewTarget {
   name: string;
   mimeType?: string | null;
 }
+
+const PAGE_BATCH = 10;
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} КБ`;
@@ -34,7 +37,9 @@ export function DocumentPreviewDialog({
 }) {
   const [pages, setPages] = useState<DocumentPage[] | null>(null);
   const [sizeBytes, setSizeBytes] = useState<number | null>(null);
-  const [truncated, setTruncated] = useState(false);
+  const [totalPages, setTotalPages] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,15 +47,16 @@ export function DocumentPreviewDialog({
     let cancelled = false;
     setPages(null);
     setSizeBytes(null);
+    setHasMore(false);
     setError(null);
-    setTruncated(false);
     documentsApi
-      .content(orgId, target.id)
+      .content(orgId, target.id, { offset: 0, limit: PAGE_BATCH })
       .then((res) => {
         if (cancelled) return;
         setPages(res.pages);
         setSizeBytes(res.document.sizeBytes);
-        setTruncated(res.truncated);
+        setTotalPages(res.totalPages);
+        setHasMore(res.hasMore);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -60,6 +66,23 @@ export function DocumentPreviewDialog({
       cancelled = true;
     };
   }, [orgId, target]);
+
+  async function loadMore() {
+    if (!target || !pages || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await documentsApi.content(orgId, target.id, {
+        offset: pages.length,
+        limit: PAGE_BATCH,
+      });
+      setPages((prev) => [...(prev ?? []), ...res.pages]);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось загрузить продолжение");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const type = docType({ mimeType: target?.mimeType, name: target?.name });
   const TypeIcon = type.icon;
@@ -77,13 +100,26 @@ export function DocumentPreviewDialog({
             >
               <TypeIcon className={cn("h-5 w-5", type.text)} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <DialogTitle className="truncate">{target?.name}</DialogTitle>
               <p className="mt-1 text-xs text-muted-foreground">
                 {type.label}
                 {sizeBytes !== null ? ` · ${formatSize(sizeBytes)}` : ""}
+                {totalPages > 1 ? ` · ${totalPages} стр.` : ""}
               </p>
             </div>
+            {target && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                onClick={() => window.open(documentsApi.downloadUrl(orgId, target.id), "_blank")}
+                title="Скачать оригинальный файл"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Скачать
+              </Button>
+            )}
           </div>
         </DialogHeader>
 
@@ -109,10 +145,19 @@ export function DocumentPreviewDialog({
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{p.text}</p>
                 </div>
               ))}
-              {truncated && (
-                <p className="pt-2 text-xs text-muted-foreground italic">
-                  Документ слишком большой — показано начало.
-                </p>
+              {hasMore && (
+                <div className="flex justify-center pt-1">
+                  <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore}>
+                    {loadingMore ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Загружаем...
+                      </>
+                    ) : (
+                      `Показать ещё (${pages.length} из ${totalPages})`
+                    )}
+                  </Button>
+                </div>
               )}
             </div>
           )}

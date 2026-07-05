@@ -108,6 +108,8 @@ export const documents = pgTable("documents", {
   storagePath: text("storage_path").notNull(),
   status: documentStatusEnum("status").notNull().default("pending"),
   failureReason: text("failure_reason"),
+  summary: text("summary"),
+  summaryGeneratedAt: timestamp("summary_generated_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -160,5 +162,36 @@ export const messages = pgTable("messages", {
   sources: jsonb("sources").$type<
     { documentId: string; filename: string; pageNumber: number | null }[]
   >(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// consent to legal terms (versioned): one row per acceptance
+export const legalConsents = pgTable("legal_consents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  document: varchar("document", { length: 64 }).notNull(),
+  version: varchar("version", { length: 32 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// audit trail of member actions; documentId is a plain uuid (no FK) so history
+// survives document deletion — the human-readable name lives in metadata
+export const activityLog = pgTable("activity_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  action: varchar("action", { length: 32 }).notNull(),
+  documentId: uuid("document_id"),
+  chatId: uuid("chat_id"),
+  metadata: jsonb("metadata").$type<Record<string, string>>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

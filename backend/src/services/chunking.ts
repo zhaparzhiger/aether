@@ -46,10 +46,12 @@ export async function extractPages(
   throw new Error(`Unsupported mime type: ${mimeType}`);
 }
 
+export const CHUNK_OVERLAP = 150;
+
 export function chunkText(
   text: string,
   chunkSize = 1000,
-  overlap = 150
+  overlap = CHUNK_OVERLAP
 ): string[] {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return [];

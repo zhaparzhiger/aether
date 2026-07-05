@@ -9,6 +9,7 @@ import { embedQuery } from "../services/embeddings";
 import { retrieveRelevantChunks } from "../services/rag";
 import { askGemini, ChatTurn, AnswerMode } from "../services/geminiChat";
 import { exportChatPdf, exportChatDocx } from "../services/chatExport";
+import { logActivity } from "../services/activityLog";
 
 const router = Router();
 
@@ -306,6 +307,14 @@ router.post(
             : undefined,
         })
         .returning();
+
+      logActivity({
+        organizationId: req.params.orgId,
+        userId: req.auth!.userId,
+        action: "chat_question",
+        chatId: chat.id,
+        metadata: { question: body.content.slice(0, 300) },
+      });
 
       let answer: string;
       let sources: { documentId: string; filename: string; pageNumber: number | null }[] = [];

@@ -19,7 +19,7 @@ const SCOPE_EMPTY: Record<ChatScope, string> = {
   all: "В организации пока нет чатов",
 };
 
-export function ChatList() {
+export function ChatList({ className }: { className?: string }) {
   const { currentOrg } = useAuth();
   const orgId = currentOrg!.organizationId;
   const isAdmin = hasRole(currentOrg?.role, "admin");
@@ -57,7 +57,7 @@ export function ChatList() {
   }
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col border-r">
+    <div className={cn("flex h-full w-full shrink-0 flex-col border-r md:w-72", className)}>
       <div className="space-y-2 border-b p-3">
         <Button className="w-full gap-2" size="sm" onClick={handleNewChat} disabled={creating}>
           <Plus className="h-4 w-4" />
@@ -79,7 +79,7 @@ export function ChatList() {
           </TabsList>
         </Tabs>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
         <div className="space-y-1 p-2">
           {chats.map((c) => (
             <Link
@@ -93,7 +93,7 @@ export function ChatList() {
               )}
             >
               <span className="flex items-center gap-1.5">
-                {c.isShared && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />}
+                {c.isShared && <Star className="h-3 w-3 shrink-0 fill-current opacity-80" />}
                 <span className="truncate">{c.title}</span>
               </span>
               {scope !== "mine" && c.authorName && (

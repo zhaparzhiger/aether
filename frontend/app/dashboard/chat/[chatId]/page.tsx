@@ -1,8 +1,9 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Send, FileText, Star, Download, Eye, Paperclip, X, Loader2 } from "lucide-react";
+import { Send, FileText, Star, Download, Eye, Paperclip, X, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -157,8 +158,15 @@ export default function ChatThreadPage({ params }: { params: Promise<{ chatId: s
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {chatMeta && (
-        <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
-          <div className="min-w-0">
+        <div className="flex items-center justify-between gap-2 border-b px-2 py-2 sm:px-4">
+          <Link
+            href="/dashboard/chat"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+            title="К списку чатов"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{chatMeta.title}</p>
             {readOnly && (
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -183,7 +191,7 @@ export default function ChatThreadPage({ params }: { params: Promise<{ chatId: s
               <Star
                 className={cn(
                   "h-4 w-4",
-                  chatMeta.isShared ? "fill-amber-400 text-amber-400" : "text-muted-foreground"
+                  chatMeta.isShared ? "fill-foreground text-foreground" : "text-muted-foreground"
                 )}
               />
               {chatMeta.isShared ? "Важный" : "В важные"}
@@ -214,7 +222,7 @@ export default function ChatThreadPage({ params }: { params: Promise<{ chatId: s
         </div>
       )}
 
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden p-4">
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           {loading && <p className="text-sm text-muted-foreground">Загрузка...</p>}
           {messages.map((m) => (

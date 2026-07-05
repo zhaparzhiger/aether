@@ -73,7 +73,7 @@ export default function GeneratePage() {
 
   if (!canGenerate) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="mb-6 text-2xl font-semibold">Генерация документов</h1>
         <p className="text-sm text-muted-foreground">
           Генерация документов доступна ролям Менеджер и выше.
@@ -83,7 +83,7 @@ export default function GeneratePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
       <h1 className="text-2xl font-semibold">Генерация документов</h1>
 
       <Card>

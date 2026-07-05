@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MessageSquare, FileText, Users, Settings, LogOut, Search, BarChart3, Wand2 } from "lucide-react";
+import { MessageSquare, FileText, Users, Settings, LogOut, Search, BarChart3, Wand2, Activity } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -13,20 +13,28 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { ROLE_LABELS } from "@/lib/roles";
+import { Role } from "@/lib/api";
+import { ROLE_LABELS, hasRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { href: string; label: string; icon: typeof MessageSquare; minRole?: Role }[] = [
   { href: "/dashboard/chat", label: "Чат", icon: MessageSquare },
   { href: "/dashboard/documents", label: "Документы", icon: FileText },
   { href: "/dashboard/search", label: "Поиск", icon: Search },
   { href: "/dashboard/generate", label: "Генерация", icon: Wand2 },
   { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3 },
+  { href: "/dashboard/activity", label: "Активность", icon: Activity, minRole: "manager" },
   { href: "/dashboard/team", label: "Команда", icon: Users },
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  className,
+  onNavigate,
+}: {
+  className?: string;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, organizations, currentOrg, setCurrentOrgId, logout } = useAuth();
@@ -37,12 +45,19 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r bg-sidebar">
+    <aside className={cn("flex h-full w-64 shrink-0 flex-col border-r bg-sidebar", className)}>
       <div className="p-4">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" className="w-full justify-start px-2 text-left">
+              <Button
+                variant="ghost"
+                className={cn(
+                  "w-full justify-start px-2 text-left",
+                  organizations.length <= 1 &&
+                    "cursor-default hover:bg-transparent dark:hover:bg-transparent"
+                )}
+              >
                 <div className="flex flex-col overflow-hidden">
                   <span className="truncate text-sm font-semibold">
                     {currentOrg?.organizationName ?? "Aether"}
@@ -72,17 +87,18 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-2">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => !item.minRole || hasRole(currentOrg?.role, item.minRole)).map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-sm transition-colors",
                 active
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-sidebar-accent font-medium text-foreground"
+                  : "font-normal text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"
               )}
             >
               <item.icon className="h-4 w-4" />

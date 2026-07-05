@@ -97,12 +97,66 @@ export interface DocumentItem {
   sizeBytes: number;
   status: DocumentStatus;
   failureReason: string | null;
+  summary?: string | null;
+  summaryGeneratedAt?: string | null;
   createdAt: string;
 }
 
 export interface DocumentPage {
   pageNumber: number | null;
   text: string;
+}
+
+export interface DocumentContentResponse {
+  document: DocumentItem;
+  pages: DocumentPage[];
+  totalPages: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface LegalConsent {
+  document: string;
+  version: string;
+  createdAt: string;
+}
+
+export type ActivityAction =
+  | "chat_question"
+  | "document_upload"
+  | "document_delete"
+  | "document_download"
+  | "summary_generate";
+
+export interface ActivityMember {
+  userId: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  role: Role;
+  questions: number;
+  uploads: number;
+  downloads: number;
+  lastActivity: string | null;
+}
+
+export interface ActivityEntry {
+  id: string;
+  action: ActivityAction;
+  documentId: string | null;
+  chatId: string | null;
+  metadata: Record<string, string> | null;
+  createdAt: string;
+  userId: string;
+  userName: string;
+}
+
+export interface MemberQuestion {
+  question: string;
+  answer: string | null;
+  chatId: string;
+  chatTitle: string;
+  askedAt: string;
 }
 
 export interface Chat {
@@ -235,10 +289,15 @@ export const collectionsApi = {
 export const documentsApi = {
   list: (orgId: string) =>
     apiFetch<{ documents: DocumentItem[] }>(`/organizations/${orgId}/documents`),
-  upload: (orgId: string, file: File, collectionId?: string) => {
+  upload: (
+    orgId: string,
+    file: File,
+    opts?: { collectionId?: string; acceptTerms?: boolean }
+  ) => {
     const form = new FormData();
     form.append("file", file);
-    if (collectionId) form.append("collectionId", collectionId);
+    if (opts?.collectionId) form.append("collectionId", opts.collectionId);
+    if (opts?.acceptTerms) form.append("acceptTerms", "true");
     return apiFetch<{ document: DocumentItem }>(`/organizations/${orgId}/documents`, {
       method: "POST",
       body: form,
@@ -246,10 +305,58 @@ export const documentsApi = {
   },
   remove: (orgId: string, id: string) =>
     apiFetch<{ ok: true }>(`/organizations/${orgId}/documents/${id}`, { method: "DELETE" }),
-  content: (orgId: string, id: string) =>
-    apiFetch<{ document: DocumentItem; pages: DocumentPage[]; truncated: boolean }>(
-      `/organizations/${orgId}/documents/${id}/content`
+  move: (orgId: string, id: string, collectionId: string | null) =>
+    apiFetch<{ document: DocumentItem }>(`/organizations/${orgId}/documents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ collectionId }),
+    }),
+  content: (orgId: string, id: string, opts?: { offset?: number; limit?: number }) =>
+    apiFetch<DocumentContentResponse>(
+      `/organizations/${orgId}/documents/${id}/content?offset=${opts?.offset ?? 0}&limit=${opts?.limit ?? 10}`
     ),
+  downloadUrl: (orgId: string, id: string) =>
+    `${API_URL}/organizations/${orgId}/documents/${id}/download`,
+  summary: (orgId: string, id: string, refresh = false) =>
+    apiFetch<{ summary: string; generatedAt: string; cached: boolean }>(
+      `/organizations/${orgId}/documents/${id}/summary`,
+      { method: "POST", body: JSON.stringify({ refresh }) }
+    ),
+};
+
+export const legalApi = {
+  myConsents: (orgId: string) =>
+    apiFetch<{ consents: LegalConsent[]; currentVersion: string }>(
+      `/organizations/${orgId}/legal/consents/me`
+    ),
+  consent: (orgId: string, document: string) =>
+    apiFetch<{ ok: true; alreadyConsented: boolean }>(`/organizations/${orgId}/legal/consents`, {
+      method: "POST",
+      body: JSON.stringify({ document }),
+    }),
+};
+
+export const activityApi = {
+  members: (orgId: string) =>
+    apiFetch<{ members: ActivityMember[] }>(`/organizations/${orgId}/activity/members`),
+  log: (orgId: string, filters?: { userId?: string; action?: string; from?: string; to?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.userId) params.set("userId", filters.userId);
+    if (filters?.action) params.set("action", filters.action);
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    const qs = params.toString();
+    return apiFetch<{ entries: ActivityEntry[] }>(
+      `/organizations/${orgId}/activity/log${qs ? `?${qs}` : ""}`
+    );
+  },
+  questions: (orgId: string, userId: string, filters?: { from?: string; to?: string }) => {
+    const params = new URLSearchParams({ userId });
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    return apiFetch<{ questions: MemberQuestion[] }>(
+      `/organizations/${orgId}/activity/questions?${params.toString()}`
+    );
+  },
 };
 
 export const chatApi = {

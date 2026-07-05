@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Folder, FolderOpen, Files, Trash2 } from "lucide-react";
+import { Folder, FolderOpen, Files, Trash2, Download, Sparkles, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,15 +24,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { collectionsApi, documentsApi, Collection, DocumentItem, DocumentStatus, ApiError } from "@/lib/api";
+import {
+  collectionsApi,
+  documentsApi,
+  legalApi,
+  Collection,
+  DocumentItem,
+  DocumentStatus,
+  ApiError,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { hasRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { docType } from "@/lib/doc-type";
+import { UPLOAD_TERMS_DOCUMENT } from "@/lib/legal";
 import {
   DocumentPreviewDialog,
   PreviewTarget,
 } from "@/components/dashboard/document-preview-dialog";
+import {
+  DocumentSummaryDialog,
+  SummaryTarget,
+} from "@/components/dashboard/document-summary-dialog";
 
 const STATUS_LABELS: Record<DocumentStatus, string> = {
   pending: "В очереди",
@@ -71,10 +85,20 @@ export default function DocumentsPage() {
   const [activeCollection, setActiveCollection] = useState<CollectionFilter>("all");
 
   const [previewDoc, setPreviewDoc] = useState<PreviewTarget | null>(null);
+  const [summaryDoc, setSummaryDoc] = useState<SummaryTarget | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<DocumentItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // drag & drop: документ тянут за «ручку» на карточке и бросают в коллекцию
+  const [draggingDoc, setDraggingDoc] = useState<DocumentItem | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadCollection, setUploadCollection] = useState<string>("none");
   const [uploading, setUploading] = useState(false);
+  // null = not loaded yet; false = the terms checkbox must be shown and checked
+  const [hasUploadConsent, setHasUploadConsent] = useState<boolean | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
@@ -96,6 +120,14 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     loadAll();
+    if (canManage) {
+      legalApi
+        .myConsents(orgId)
+        .then(({ consents }) =>
+          setHasUploadConsent(consents.some((c) => c.document === UPLOAD_TERMS_DOCUMENT))
+        )
+        .catch(() => setHasUploadConsent(false));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
@@ -122,9 +154,17 @@ export default function DocumentsPage() {
       toast.error("Выберите файл");
       return;
     }
+    if (hasUploadConsent === false && !termsAccepted) {
+      toast.error("Отметьте согласие с условиями обработки данных");
+      return;
+    }
     setUploading(true);
     try {
-      await documentsApi.upload(orgId, file, uploadCollection === "none" ? undefined : uploadCollection);
+      await documentsApi.upload(orgId, file, {
+        collectionId: uploadCollection === "none" ? undefined : uploadCollection,
+        acceptTerms: hasUploadConsent === false && termsAccepted,
+      });
+      setHasUploadConsent(true);
       toast.success("Документ загружен и отправлен на обработку");
       setUploadOpen(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -169,14 +209,57 @@ export default function DocumentsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function confirmDelete() {
+    if (!deleteDoc || deleting) return;
+    setDeleting(true);
     try {
-      await documentsApi.remove(orgId, id);
+      await documentsApi.remove(orgId, deleteDoc.id);
       toast.success("Документ удалён");
+      setDeleteDoc(null);
       loadAll();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Не удалось удалить документ");
+    } finally {
+      setDeleting(false);
     }
+  }
+
+  async function handleMove(doc: DocumentItem, collectionId: string | null) {
+    setDraggingDoc(null);
+    setDragOverTarget(null);
+    if ((doc.collectionId ?? null) === collectionId) return;
+
+    const prev = documents;
+    setDocuments((ds) => ds.map((x) => (x.id === doc.id ? { ...x, collectionId } : x)));
+    try {
+      await documentsApi.move(orgId, doc.id, collectionId);
+      toast.success(
+        collectionId
+          ? `Документ перемещён в «${collections.find((c) => c.id === collectionId)?.name ?? "коллекцию"}»`
+          : "Документ убран из коллекции"
+      );
+    } catch (err) {
+      setDocuments(prev);
+      toast.error(err instanceof ApiError ? err.message : "Не удалось переместить документ");
+    }
+  }
+
+  function dropTargetProps(targetId: string, collectionId: string | null) {
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (!draggingDoc) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (dragOverTarget !== targetId) setDragOverTarget(targetId);
+      },
+      onDragLeave: () => {
+        setDragOverTarget((t) => (t === targetId ? null : t));
+      },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        if (draggingDoc) handleMove(draggingDoc, collectionId);
+      },
+    };
   }
 
   function collectionName(id: string | null) {
@@ -200,11 +283,11 @@ export default function DocumentsPage() {
   const activeCollectionObj = collections.find((c) => c.id === activeCollection);
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Документы</h1>
         {canManage && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Dialog open={collectionDialogOpen} onOpenChange={setCollectionDialogOpen}>
               <DialogTrigger render={<Button variant="outline">Новая коллекция</Button>} />
               <DialogContent>
@@ -274,8 +357,40 @@ export default function DocumentsPage() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Документ будет обработан через Google Gemini API — содержимое передаётся
+                    стороннему провайдеру. Не загружайте гостайну, банковскую тайну и специальные
+                    категории персональных данных.
+                  </p>
+
+                  {hasUploadConsent === false && (
+                    <label className="flex cursor-pointer items-start gap-2 rounded-lg border bg-muted/40 p-3 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={termsAccepted}
+                        onChange={(e) => setTermsAccepted(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-foreground"
+                      />
+                      <span>
+                        Я принимаю{" "}
+                        <Link href="/legal/terms" target="_blank" className="underline underline-offset-2">
+                          Условия использования
+                        </Link>{" "}
+                        и{" "}
+                        <Link href="/legal/privacy" target="_blank" className="underline underline-offset-2">
+                          Политику конфиденциальности
+                        </Link>
+                        , включая передачу содержимого документов Google Gemini API.
+                      </span>
+                    </label>
+                  )}
+
                   <DialogFooter>
-                    <Button type="submit" disabled={uploading}>
+                    <Button
+                      type="submit"
+                      disabled={uploading || (hasUploadConsent === false && !termsAccepted)}
+                    >
                       {uploading ? "Загружаем..." : "Загрузить"}
                     </Button>
                   </DialogFooter>
@@ -307,16 +422,19 @@ export default function DocumentsPage() {
           <Card
             key={c.id}
             onClick={() => setActiveCollection(c.id)}
+            {...dropTargetProps(c.id, c.id)}
             className={cn(
               "group cursor-pointer py-4 transition-colors hover:border-primary/60",
-              activeCollection === c.id && "border-primary bg-primary/5"
+              activeCollection === c.id && "border-primary bg-primary/5",
+              draggingDoc && "border-dashed",
+              dragOverTarget === c.id && "border-solid border-foreground bg-accent ring-2 ring-foreground/15"
             )}
           >
             <CardContent className="flex items-center gap-3 px-4">
               {activeCollection === c.id ? (
-                <FolderOpen className="h-8 w-8 shrink-0 text-amber-500" />
+                <FolderOpen className="h-8 w-8 shrink-0 text-foreground/70" />
               ) : (
-                <Folder className="h-8 w-8 shrink-0 text-amber-500" />
+                <Folder className="h-8 w-8 shrink-0 text-muted-foreground" />
               )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium" title={c.description ?? undefined}>
@@ -328,7 +446,7 @@ export default function DocumentsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                  className="h-7 w-7 shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
                   onClick={(e) => handleDeleteCollection(e, c.id)}
                   title="Удалить коллекцию"
                 >
@@ -339,19 +457,24 @@ export default function DocumentsPage() {
           </Card>
         ))}
 
-        {uncategorizedCount > 0 && (
+        {(uncategorizedCount > 0 || draggingDoc) && (
           <Card
             onClick={() => setActiveCollection("none")}
+            {...dropTargetProps("none", null)}
             className={cn(
               "cursor-pointer py-4 transition-colors hover:border-primary/60",
-              activeCollection === "none" && "border-primary bg-primary/5"
+              activeCollection === "none" && "border-primary bg-primary/5",
+              draggingDoc && "border-dashed",
+              dragOverTarget === "none" && "border-solid border-foreground bg-accent ring-2 ring-foreground/15"
             )}
           >
             <CardContent className="flex items-center gap-3 px-4">
               <Folder className="h-8 w-8 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">Без коллекции</p>
-                <p className="text-xs text-muted-foreground">{uncategorizedCount} документов</p>
+                <p className="text-xs text-muted-foreground">
+                  {draggingDoc ? "Перетащите сюда, чтобы убрать из коллекции" : `${uncategorizedCount} документов`}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -385,6 +508,7 @@ export default function DocumentsPage() {
             return (
               <Card
                 key={d.id}
+                data-doc-card={d.id}
                 onClick={() => {
                   if (d.status !== "ready") {
                     toast.info(
@@ -396,7 +520,10 @@ export default function DocumentsPage() {
                   }
                   setPreviewDoc({ id: d.id, name: d.originalName, mimeType: d.mimeType });
                 }}
-                className="group cursor-pointer py-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+                className={cn(
+                  "group cursor-pointer py-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
+                  draggingDoc?.id === d.id && "opacity-50"
+                )}
               >
                 <CardContent className="flex h-full flex-col gap-3 px-4">
                   <div className="flex items-start justify-between gap-2">
@@ -408,20 +535,73 @@ export default function DocumentsPage() {
                     >
                       <TypeIcon className={cn("h-5 w-5", type.text)} />
                     </div>
-                    {canManage && (
+                    <div className="flex shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                      {canManage && (
+                        <button
+                          type="button"
+                          draggable
+                          title="Перетащите карточку в коллекцию"
+                          onClick={(e) => e.stopPropagation()}
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            e.dataTransfer.setData("text/plain", d.id);
+                            e.dataTransfer.effectAllowed = "move";
+                            const card = (e.target as HTMLElement).closest("[data-doc-card]");
+                            if (card instanceof HTMLElement) {
+                              e.dataTransfer.setDragImage(card, 24, 24);
+                            }
+                            setDraggingDoc(d);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingDoc(null);
+                            setDragOverTarget(null);
+                          }}
+                          className="flex h-7 w-7 cursor-grab items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                        >
+                          <Menu className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {d.status === "ready" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Пересказ документа (ИИ)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSummaryDoc({ id: d.id, name: d.originalName, mimeType: d.mimeType });
+                          }}
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                        title="Удалить документ"
+                        className="h-7 w-7"
+                        title="Скачать оригинальный файл"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDelete(d.id);
+                          window.open(documentsApi.downloadUrl(orgId, d.id), "_blank");
                         }}
                       >
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Download className="h-3.5 w-3.5 text-muted-foreground" />
                       </Button>
-                    )}
+                      {canManage && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Удалить документ"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteDoc(d);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="min-w-0">
                     <p
@@ -453,6 +633,27 @@ export default function DocumentsPage() {
       )}
 
       <DocumentPreviewDialog orgId={orgId} target={previewDoc} onClose={() => setPreviewDoc(null)} />
+      <DocumentSummaryDialog orgId={orgId} target={summaryDoc} onClose={() => setSummaryDoc(null)} />
+
+      <Dialog open={!!deleteDoc} onOpenChange={(open) => !open && !deleting && setDeleteDoc(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить документ?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            «{deleteDoc?.originalName}» будет удалён безвозвратно вместе с данными для поиска — ИИ
+            перестанет использовать его в ответах.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDoc(null)} disabled={deleting}>
+              Отмена
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Удаляем..." : "Удалить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -103,7 +103,7 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Команда</h1>
         {canManage && (

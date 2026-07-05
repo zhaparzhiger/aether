@@ -69,6 +69,19 @@ export default function OnboardingPage() {
               {submitting ? "Создаём..." : "Создать организацию"}
             </Button>
           </form>
+          <div className="mt-4 border-t pt-4">
+            <p className="mb-2 text-center text-xs text-muted-foreground">
+              Вы сотрудник и вас пригласят в существующую организацию?
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-muted-foreground"
+              onClick={() => router.push("/dashboard/chat")}
+            >
+              Пропустить этот шаг
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

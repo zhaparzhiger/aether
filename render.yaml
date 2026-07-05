@@ -1,0 +1,79 @@
+# Render Blueprint — Aether (backend + frontend).
+# Database (PostgreSQL + pgvector) lives on Neon; paste its connection string
+# into DATABASE_URL when Render prompts for the "sync: false" variables.
+#
+# Both services are Free plan and sleep after ~15 min of inactivity.
+# --include=dev is required because NODE_ENV=production would otherwise make
+# npm skip devDependencies (typescript, drizzle-kit, next, tailwind).
+
+services:
+  # ---------- Backend (Express API) ----------
+  - type: web
+    name: aether-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    buildCommand: npm install --include=dev && npm run build && npm run db:migrate
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Neon connection string (with ?sslmode=require) — paste at deploy time
+      - key: DATABASE_URL
+        sync: false
+      # generated once by Render, kept stable across deploys
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Vertex AI service account — paste the full google-key.json as one line
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: GOOGLE_CLOUD_PROJECT
+        value: gen-lang-client-0537370402
+      - key: GOOGLE_CLOUD_LOCATION
+        value: global
+      - key: GEMINI_CHAT_MODEL
+        value: gemini-3.1-flash-lite
+      - key: GEMINI_EMBEDDING_MODEL
+        value: text-embedding-004
+      # Google OAuth (optional — email/password login works without it)
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      # SMTP for team invites (optional)
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: MAX_FILE_SIZE_MB
+        value: "20"
+      # set to the frontend's public URL after it gets one (see DEPLOY.md)
+      - key: FRONTEND_URL
+        sync: false
+
+  # ---------- Frontend (Next.js) ----------
+  - type: web
+    name: aether-frontend
+    runtime: node
+    rootDir: frontend
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # NEXT_PUBLIC_* are inlined at BUILD time — set to the backend URL before
+      # the frontend builds (see DEPLOY.md)
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        sync: false
